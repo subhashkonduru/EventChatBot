@@ -758,32 +758,63 @@ Concise Professional Summary for {person_name}:"""
                 "which sessions", "relevant sessions", "suggest sessions", "recommend sessions",
                 "what should I attend", "workshop recommendations", "session suggestions", "workshop sessions",
                 "which workshops", "what workshops", "what sessions", "relevant workshops",
-                # "sessions for me", "workshops for me", "beneficial for me to attend" # These are handled by user-specific logic now
-                # The "Based on my background..." for ALL resumes is still triggered by its specific phrase match logic below
             ]
-            if any(keyword in query_lower for keyword in session_recommendation_keywords) or \
-               query_lower == "Based on my background and skills, which workshop sessions would be most beneficial for me to attend?".lower(): # This specific phrase still triggers all resumes
-                debug_info_accumulator.append("[REASONING] Query matched 'session recommendation' keywords (general or for all resumes).")
-                
-                all_resumes_trigger_phrase = "Based on my background and skills, which workshop sessions would be most beneficial for me to attend?".lower()
-                explicit_all_participants_keywords = ["all participants", "each resume", "every resume", "attendee recommendations", "for everyone"]
-                
-                process_for_all = (query_lower == all_resumes_trigger_phrase or 
-                                   any(keyword in query_lower for keyword in explicit_all_participants_keywords))
-                
-                # Ensure user-specific flow (asking for background) isn't re-triggered if it fell through
-                if not st.session_state.get("waiting_for_user_background_for_recommendation"):
+            
+            name_for_rec_pattern = r"(?:recommend|suggest|find|get|what|which)\s+(?:workshops?|sessions?|recommendations?)\s+(?:for|to|for participant|for user|for attendee)\s+([A-Za-z]+\s+[A-Za-z]+(?:\s+[A-Za-z]+)?)$"
+            name_match_for_recommendation = re.search(name_for_rec_pattern, query_lower)
+            target_participant_name_for_rec = None
+
+            if name_match_for_recommendation:
+                target_participant_name_for_rec = name_match_for_recommendation.group(1).strip()
+                # Validate extracted name - avoid common nouns if regex is too greedy
+                common_non_names = ["me", "all", "everyone", "participants", "attendees", "background", "skills"]
+                if target_participant_name_for_rec.lower() in common_non_names:
+                    target_participant_name_for_rec = None # Reset if it looks like a non-name
+                else:
+                    debug_info_accumulator.append(f"[REASONING] Query identified as session recommendation for specific participant: {target_participant_name_for_rec}")
+            
+            general_rec_keywords_matched = any(keyword in query_lower for keyword in session_recommendation_keywords)
+            all_resumes_trigger_phrase_matched = query_lower == "Based on my background and skills, which workshop sessions would be most beneficial for me to attend?".lower()
+
+            if target_participant_name_for_rec or general_rec_keywords_matched or all_resumes_trigger_phrase_matched:
+                user_specific_bg_to_pass = None
+                process_for_all = False
+
+                if target_participant_name_for_rec:
+                    debug_info_accumulator.append(f"  Proceeding with recommendation for specific participant: {target_participant_name_for_rec}")
+                    # process_for_all is already False, user_specific_bg_to_pass is already None
+                elif all_resumes_trigger_phrase_matched: # This implies recommendations for each resume based on its content
+                    debug_info_accumulator.append("[REASONING] Query matched 'session recommendation' for all resumes (specific phrasing).")
+                    process_for_all = True
+                elif general_rec_keywords_matched: # General keywords, could be for chatbot user or all, depending on other phrases
+                    debug_info_accumulator.append("[REASONING] Query matched general 'session recommendation' keywords.")
+                    explicit_all_participants_keywords = ["all participants", "each resume", "every resume", "attendee recommendations", "for everyone"]
+                    if any(keyword in query_lower for keyword in explicit_all_participants_keywords):
+                        process_for_all = True
+                    else:
+                        # Assumed for chatbot user if no specific name and not explicitly for all
+                        user_specific_bg_to_pass = st.session_state.get("user_provided_background")
+                        if not user_specific_bg_to_pass and not st.session_state.get("waiting_for_user_background_for_recommendation"):
+                            # If no background provided yet for the chatbot user, and not already waiting, trigger asking for it.
+                            # This specific path might conflict with the user-specific recommendation block earlier (Priority 1 for "me"),
+                            # but this ensures if it falls through, it can still be caught if general keywords are used.
+                            # However, the earlier block for "for me" should ideally catch it first.
+                            # For now, let it proceed to get_session_recommendations, which will handle asking for BG if user_specific_bg_to_pass is None and not process_for_all / target_participant_name
+                            pass # Let get_session_recommendations handle it if user_specific_bg_to_pass is None and not specific target
+
+                # Ensure user-specific flow (asking for background for the chatbot user) isn't re-triggered if it fell through
+                # or if we are processing for a specific named participant.
+                if not st.session_state.get("waiting_for_user_background_for_recommendation") or target_participant_name_for_rec:
                     response_data = get_session_recommendations(
                         user_query, 
                         vector_store_instance, 
                         process_for_all_resumes=process_for_all, 
                         api_key=api_key, 
-                        debug_accumulator_parent=debug_info_accumulator
-                        # No user_specific_background here, relies on query or all resumes
+                        debug_accumulator_parent=debug_info_accumulator,
+                        user_specific_background=user_specific_bg_to_pass, # Pass chatbot user's BG if relevant
+                        target_participant_name=target_participant_name_for_rec # Pass specific name if extracted
                     )
                     return {"answer": response_data["result"], "debug_info": "\n".join(response_data.get("debug_info_list",[]))}
-                # If waiting_for_user_background_for_recommendation is true, it means the "for me" logic should have caught it earlier.
-                # This path (general session rec) should ideally not be hit if we are waiting.
 
             # --- Priority 4: Similar Background/Networking ---
             similar_background_keywords = [
@@ -1056,14 +1087,30 @@ Concise Professional Summary for {person_name}:"""
 
         # Prepare the input dictionary based on the prompt type
         if system_prompt_template_to_use == system_prompt_for_general:
-            response = chain.run({
+            chain_inputs = {
                 "question": user_query,
                 "current_date": current_date_str
-                # chat_history is implicitly handled by the memory
-            })
+                # chat_history is implicitly handled by memory
+            }
+            chain_result = chain(chain_inputs) # Use __call__
+            response = chain_result.get(st.session_state.chat_memory_main.output_key) # Expected output key
+
+            # Fallback if the expected output_key didn't yield a result
+            if response is None and isinstance(chain_result, dict):
+                output_keys = chain.output_keys
+                if output_keys:
+                    response = chain_result.get(output_keys[0])
+                if response is None: # Still None, try 'text' as a common default
+                    response = chain_result.get("text")
+            elif not isinstance(chain_result, dict) and chain_result is not None: # if chain() returned a string directly
+                 response = str(chain_result)
+            elif response is None: # If response is still None after all checks
+                response = "Sorry, I couldn't formulate a response for that."
+                debug_info_accumulator.append("[ERROR] LLMChain result was None or not in expected format.")
+
         else: # This is the feedback path
             # Feedback prompt only expects "feedback" which maps to "question" here
-            response = chain.run(user_query) # or chain.run({"feedback": user_query}) if prompt variable is "feedback"
+            response = chain.run(feedback=user_query) # Assuming feedback prompt's input_variable is "feedback"
 
         debug_info_accumulator.append(f"  General Q&A LLMChain Response: {response}")
         return {"answer": response, "debug_info": "\n".join(debug_info_accumulator)}
@@ -1086,17 +1133,68 @@ Concise Professional Summary for {person_name}:"""
             "debug_info": "\n".join(debug_info_accumulator)
         }
 
-def get_session_recommendations(user_query, vector_store_instance, process_for_all_resumes=False, api_key=None, debug_accumulator_parent=None, user_specific_background=None): # Added user_specific_background
-    """
-    Get personalized session recommendations.
-    If process_for_all_resumes is True, it iterates through all resumes.
-    If user_specific_background is provided, it uses that.
-    Otherwise, it provides recommendations based on the user_query or a general context.
-    """
+def get_session_recommendations(user_query, vector_store_instance, process_for_all_resumes=False, api_key=None, debug_accumulator_parent=None, user_specific_background=None, target_participant_name=None): # Added target_participant_name
     local_debug_info = debug_accumulator_parent if debug_accumulator_parent is not None else []
-    local_debug_info.append(f"[FUNC_CALL] get_session_recommendations (process_for_all={process_for_all_resumes}, user_specific_bg_provided={bool(user_specific_background)})")
+    local_debug_info.append(f"[FUNC_CALL] get_session_recommendations (process_for_all={process_for_all_resumes}, user_specific_bg_provided={bool(user_specific_background)}, target_participant_name='{target_participant_name}')")
 
-    # If a specific background is provided by the user, prioritize it.
+    if target_participant_name:
+        local_debug_info.append(f"  [INFO] Generating session recommendations specifically for: {target_participant_name}")
+        if not vector_store_instance:
+            answer = f"I need access to resume information to provide session recommendations for {target_participant_name}. Please process resumes first."
+            local_debug_info.append(f"    [ERROR] Vector store not available for {target_participant_name}.")
+            return {"result": answer, "debug_info_list": local_debug_info}
+        
+        # Get background for target_participant_name
+        # We need to pass a new list for debug_info to get_resume_by_name and then extend local_debug_info
+        target_resume_debug_info = []
+        resume_data_results = get_resume_by_name(vector_store_instance, target_participant_name, debug_accumulator_parent=target_resume_debug_info)
+        local_debug_info.extend(target_resume_debug_info) # Extend with debug info from get_resume_by_name
+
+        retrieved_docs_for_target = resume_data_results.get("docs")
+        retrieval_error_for_target = resume_data_results.get("error")
+
+        if retrieval_error_for_target or not retrieved_docs_for_target:
+            answer = f"Could not retrieve resume information for '{target_participant_name}' to recommend workshops. "
+            if retrieval_error_for_target:
+                answer += f"Details: {retrieval_error_for_target}"
+            else:
+                answer += "No resume content found. Please ensure the resume exists and has been processed."
+            local_debug_info.append(f"    [ERROR] Failed to get resume for {target_participant_name}: {retrieval_error_for_target if retrieval_error_for_target else 'No docs'}")
+            return {"result": answer, "debug_info_list": local_debug_info}
+
+        background_info = " ".join([doc.page_content for doc in retrieved_docs_for_target])
+        if not background_info.strip():
+            answer = f"The resume content for '{target_participant_name}' appears to be empty. I can't provide workshop recommendations without more information."
+            local_debug_info.append(f"    [ERROR] Empty resume content for {target_participant_name}.")
+            return {"result": answer, "debug_info_list": local_debug_info}
+        
+        local_debug_info.append(f"    Background for {target_participant_name} (first 100 chars): {background_info[:100].replace('\n',' ')}...")
+        recommendations = utils.get_workshop_recommendations(background_info)
+        local_debug_info.append(f"    utils.get_workshop_recommendations (for {target_participant_name}) returned {len(recommendations)} recommendations.")
+        
+        if not recommendations:
+            answer = (f"I couldn't find any specific workshop sessions to recommend for {target_participant_name} based on their resume. "
+                       "Please ensure `workshops.pdf` is available or workshops are listed in the agenda, and that the resume contains relevant details. "
+                       f"{target_participant_name} might want to check the full agenda.")
+            local_debug_info.append(f"    No workshop recommendations found for {target_participant_name}.")
+            return {"result": answer, "debug_info_list": local_debug_info}
+
+        response_str = f"🎯 **Workshop Recommendations for {target_participant_name} (based on their resume):**\n\n"
+        for i, rec in enumerate(recommendations, 1):
+            response_str += f"**{i}. {rec.get('title', 'N/A')}**\n"
+            if rec.get('time'): response_str += f"🕒 Time: {rec['time']}\n"
+            desc = rec.get('description', ''); prereq = rec.get('prerequisites', '')
+            if desc: response_str += f"📝 Desc: {desc[:150] + '...' if len(desc) > 150 else desc}\n"
+            if prereq: response_str += f"⚠️ Needs: {prereq[:100] + '...' if len(prereq) > 100 else prereq}\n"
+            if rec.get('relevance_reasons'):
+                response_str += "*Possible Relevance Based on Resume:*\n"
+                for reason in rec['relevance_reasons'][:2]: response_str += f"• {reason[:100] + '...' if len(reason) > 100 else reason}\n"
+            response_str += "\n"
+        response_str += f"\n{target_participant_name} may also want to check the full agenda or workshop list for more options!"
+        local_debug_info.append(f"    Successfully formatted recommendations for {target_participant_name}.")
+        return {"result": response_str, "debug_info_list": local_debug_info}
+
+    # If a specific background is provided by the user (chatbot user), prioritize it.
     if user_specific_background:
         local_debug_info.append(f"[INFO] Using user-specific background for recommendations: {user_specific_background[:100]}...")
         print(f"[DEBUG] Using user-specific background for recommendations: {user_specific_background[:100]}...")
