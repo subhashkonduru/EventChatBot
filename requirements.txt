@@ -4,7 +4,6 @@ langchain
 langchain-google-genai
 langchain-community
 faiss-cpu
-PyPDFLoader
+pypdf
 python-docx
 tiktoken
-# Add specific versions if known, e.g., streamlit==1.33.0 
