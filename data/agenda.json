@@ -1,0 +1,66 @@
+{
+    "title": "Workshop on AI Innovations",
+    "date": "2024-07-28",
+    "schedule": [
+        {
+            "time": "09:00 AM",
+            "event": "Registration & Welcome Coffee"
+        },
+        {
+            "time": "09:30 AM",
+            "event": "Opening Keynote: The Future of AI",
+            "speaker": "Dr. AI Expert"
+        },
+        {
+            "time": "10:30 AM",
+            "event": "Session 1: Deep Learning Advances",
+            "track": "Technical"
+        },
+        {
+            "time": "10:30 AM",
+            "event": "Session A: AI in Business",
+            "track": "Business"
+        },
+        {
+            "time": "11:30 AM",
+            "event": "Coffee Break & Networking"
+        },
+        {
+            "time": "12:00 PM",
+            "event": "Session 2: Natural Language Processing Trends",
+            "track": "Technical"
+        },
+        {
+            "time": "12:00 PM",
+            "event": "Session B: Ethical AI",
+            "track": "Business"
+        },
+        {
+            "time": "01:00 PM",
+            "event": "Lunch Break"
+        },
+        {
+            "time": "02:00 PM",
+            "event": "Session 3: Computer Vision Applications",
+            "track": "Technical"
+        },
+        {
+            "time": "02:00 PM",
+            "event": "Session C: AI Startups Showcase",
+            "track": "Business"
+        },
+        {
+            "time": "03:00 PM",
+            "event": "Workshop: Hands-on with Generative AI",
+            "materials_needed": "Laptop with internet access"
+        },
+        {
+            "time": "04:30 PM",
+            "event": "Closing Remarks & Feedback Collection"
+        },
+        {
+            "time": "05:00 PM",
+            "event": "Networking Reception"
+        }
+    ]
+}

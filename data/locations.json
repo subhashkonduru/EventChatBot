@@ -1,0 +1,11 @@
+{
+    "washroom_men": "Down the main hall, to your left, Room 101.",
+    "washroom_women": "Down the main hall, to your right, Room 102.",
+    "washroom_accessible": "Next to the registration desk, Room 103.",
+    "main_hall": "You are currently in or near the main hall where keynotes and large sessions take place.",
+    "session_1_technical_room": "Room 201, second floor.",
+    "session_a_business_room": "Room 205, second floor.",
+    "lunch_area": "Cafeteria, ground floor, at the end of the west wing.",
+    "registration_desk": "At the main entrance of the venue.",
+    "first_aid": "Room G02, near the security office."
+}

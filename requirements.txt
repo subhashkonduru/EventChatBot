@@ -1,0 +1,10 @@
+streamlit
+google-generativeai
+langchain
+langchain-google-genai
+langchain-community
+faiss-cpu
+PyPDFLoader
+python-docx
+tiktoken
+# Add specific versions if known, e.g., streamlit==1.33.0 
