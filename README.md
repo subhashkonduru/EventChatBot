@@ -2,7 +2,7 @@
 
 Welcome to the AI Event Bot! This interactive chatbot is designed to assist attendees and organizers during workshops, conferences, or events. It provides information about the event schedule, locations, helps analyze attendee resumes for skill matching and networking, and can offer workshop recommendations.
 
-## Features
+### Features
 
 *   **Event Information Retrieval:**
     *   Displays the event agenda (loaded from `Agenda.pdf` if present in the `data` directory, otherwise falls back to `data/agenda.json` or a default).

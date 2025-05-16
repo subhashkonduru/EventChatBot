@@ -5,7 +5,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
 import google.generativeai as genai
 import streamlit as st
-
+#Test
 # It's good practice to load API key from environment variables
 # GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 # if not GOOGLE_API_KEY:
