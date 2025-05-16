@@ -304,9 +304,39 @@ def get_details_for_all_resumes(vector_store_instance, detail_type_for_display, 
 
 # Main Q&A function
 def get_bot_response(user_query, api_key, vector_store_instance=None, chat_history=None):
-    debug_info_accumulator = [f"User Query: {user_query}"]
-    query_lower = user_query.lower().strip() # ADDED DEFINITION HERE
-    
+    query_lower = user_query.lower().strip()
+    debug_info_accumulator = []
+
+    # Check for location-related queries
+    location_keywords = ["location", "venue", "where is datavalley", "institute address", "where is the event", "where is training"]
+    if any(keyword in query_lower for keyword in location_keywords):
+        debug_info_accumulator.append("[REASONING] Query matched location keywords")
+        location_info = "Datavalley.ai | IT Solutions | Training & Placement Institute\n📍 Address: Plot No: 4, Image Gardens Rd, Madhapur, Hyderabad, Telangana 500081"
+        return {
+            "answer": f"🏢 **Venue Location**\n\n{location_info}",
+            "debug_info": "\n".join(debug_info_accumulator)
+        }
+
+    # Check for speaker-related queries
+    speaker_keywords = ["speaker", "presenter", "speakers", "presenting", "who is speaking", "who will speak"]
+    if any(keyword in query_lower for keyword in speaker_keywords):
+        debug_info_accumulator.append("[REASONING] Query matched speaker-related keywords")
+        speaker_data = extract_speakers_from_agenda()
+        speakers = speaker_data["speakers"]
+        debug_info_accumulator.extend(speaker_data["debug_info"])
+        
+        if speakers:
+            answer_text = "📢 **Event Speakers**\n\n"
+            for speaker in speakers:
+                answer_text += f"• {speaker}\n"
+        else:
+            answer_text = "I couldn't find any specific speaker information in the agenda. Please check the event schedule for the most up-to-date information."
+        
+        return {
+            "answer": answer_text, 
+            "debug_info": "\n".join(debug_info_accumulator)
+        }
+
     # Initialize chat memory if not already done
     if "chat_memory_main" not in st.session_state:
         st.session_state.chat_memory_main = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
@@ -551,7 +581,7 @@ def get_bot_response(user_query, api_key, vector_store_instance=None, chat_histo
 
             # --- New Priority: "Resume <Name>" Summary Query ---
             # CORRECTED \\s to \s in regex
-            resume_summary_match = re.search(r"^(?:summarize resume for|resume summary for|resume for|resume)\s+([A-Za-z]+\s+[A-ZaZ]+(?:\s+[A-Za-z]+)?)$", query_lower) # query_lower is already stripped
+            resume_summary_match = re.search(r"^(?:summarize resume for|resume summary for|resume for|resume)\s+([A-ZaZ]+\s+[A-ZaZ]+(?:\s+[A-Za-z]+)?)$", query_lower) # query_lower is already stripped
             if resume_summary_match:
                 name_for_summary = resume_summary_match.group(1).strip()
                 debug_info_accumulator.append(f"[REASONING] Query matched 'Resume <Name> Summary' for Name: {name_for_summary}")
@@ -673,14 +703,14 @@ Concise Professional Summary for {person_name}:"""
                     else:
                         answer_text = f"I couldn't find participants strongly matching the **{role_name}** profile with skills like {', '.join(parsed_skills)} among the processed resumes."
                     
-                    return {"answer": answer_text, "debug_info": "\\n".join(debug_info_accumulator)}
+                    return {"answer": answer_text, "debug_info": "\\n".join(resume_data.get("debug_info_list",[]))}
 
             # --- Priority 2 (now 3): General Skill Search (e.g., "who has Python skill") ---
             skill_search_patterns = [
                 # CORRECTED \\s to \s in regex patterns below
                 r"(?:find|search for|looking for|who has|who knows|list participants with|participants with experience in|tell me who has)\s+(?:\w+\s+)?(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+years(?:\s+of)?\s+experience\s*(?:in|with|related to)?\s+(.+?)(?:\?|$)",
                 r"(?:find|search for|looking for|who has|who knows|list participants with|participants with experience in|tell me who has|show me who has|show who has)\s+(?:experience|skills|knowledge)?\s*(?:in|with|of|related to|on)\s+([A-Za-z0-9 .+#/\-]+?)(?:\s*skills|\s*experience)?(?:\?|$)",
-                r"who (?:\s*has|\s*have|\s*knows|\s*is experienced in|\s*is skilled in|\s*worked with|\s*worked on|\s*worked in)\s+([A-Za-z0-9 .+#/\-]+?)(?:\s*skills|\s*experience)?(?:\\?|$)", # Added \s* around verb
+                r"who (?:\s*has|\s*have|\s*knows|\s*is experienced in|\s*is skilled in|\s*worked with|\s*worked on|\s*worked in)\s+([A-Za-z0-9 .+#/\-]+?)(?:\s*skills|\s*experience)?(?:\?|$)", # Added \s* around verb
                 r"([A-Za-z0-9 .+#/\-]+?)\s+(?:skills?|experience|expertise|knowledge)\s+(?:for|of|among|in|possessed by)\s*(?:participants?|attendees?|people|individuals|users|folks|candidates|team members?)(?:\?|$)",
                 r"(?:participants?|attendees?|people|individuals|users|folks|candidates|team members?)\s*(?:with|having|possessing)\s+([A-Za-z0-9 .+#/\-]+?)\s*(?:skills?|experience|expertise|knowledge)?(?:\?|$)",
                 r"(?:get|show|find|list|can we get|can you find|could we see)\s*(?:me|us)?\s*([A-Za-z0-9 .+#/\-]+?)\s*(?:resumes?|profiles?|cvs?|candidates?|participants?)(?:\?|$)"
@@ -762,7 +792,7 @@ Concise Professional Summary for {person_name}:"""
                 "which workshops", "what workshops", "what sessions", "relevant workshops",
             ]
             
-            name_for_rec_pattern = r"(?:recommend|suggest|find|get|what|which)\s+(?:workshops?|sessions?|recommendations?)\s+(?:for|to|for participant|for user|for attendee)\s+([A-Za-z]+\s+[A-ZaZ]+(?:\s+[A-Za-z]+)?)$"
+            name_for_rec_pattern = r"(?:recommend|suggest|find|get|what|which)\s+(?:workshops?|sessions?|recommendations?)\s+(?:for|to|for participant|for user|for attendee)\s+([A-ZaZ]+\s+[A-ZaZ]+(?:\s+[A-Za-z]+)?)$"
             name_match_for_recommendation = re.search(name_for_rec_pattern, query_lower)
             target_participant_name_for_rec = None
 
@@ -873,7 +903,7 @@ Concise Professional Summary for {person_name}:"""
                 "data_ml": {
                     "keywords": ["data & ml experience", "machine learning experience", "data science experience"],
                     "detail_type": "Data Science & ML Experience",
-                    "template": "From the provided resume content: {context}, extract and list explicitly mentioned experience, projects, and skills related to data analysis, machine learning, AI, or data science. Structure the output with clear headings for aspects like 'Projects', 'Skills', 'Tools', using bullet points. If no such experience/skills are found, state 'No data science, ML, or AI experience details were found.'. Ensure good readability."
+                    "template": "From the provided resume content: {context}, extract and list explicitly mentioned experience, projects, and skills related to data analysis, machine learning, AI, or data science. Structure the output with clear headings for aspects like 'Projects', 'Skills', 'Tools', using bullet points. If no data science, ML, or AI experience/skills are found, state 'No data science, ML, or AI experience details were found.'. Ensure good readability."
                 },
                 "cloud_experience": {
                     "keywords": ["cloud technologies experience", "cloud experience"],
@@ -974,6 +1004,13 @@ Concise Professional Summary for {person_name}:"""
         debug_info_accumulator.append(f"[UTIL_CALL] utils.get_location_info('{potential_place}') -> Result: {location_info}")
         return {"answer": location_info, "debug_info": "\n".join(debug_info_accumulator)}
 
+    # Add this near other location-related checks
+    if "location" in query_lower or "venue" in query_lower or "where is datavalley" in query_lower or "institute address" in query_lower:
+        debug_info_accumulator.append("[REASONING] Query matched 'location/venue' keywords.")
+        location_info = "Datavalley.ai | IT Solutions | Training & Placement Institute\n📍 Address: Plot No: 4, Image Gardens Rd, Madhapur, Hyderabad, Telangana 500081"
+        debug_info.accumulator.append(f"[UTIL_CALL] Using default location info -> Result: {location_info}")
+        return {"answer": f"🏢 **Venue Location**\n\n{location_info}", "debug_info": "\n".join(debug_info_accumulator)}
+
     # --- General Q&A and Conversational Feedback (Question 6) ---
     try:
         debug_info_accumulator.append("[REASONING] Entering General Q&A / Feedback block.")
@@ -1020,6 +1057,7 @@ Concise Professional Summary for {person_name}:"""
                 
                 Respond to their feedback and ask an appropriate follow-up question:"""
             
+           
             feedback_prompt = PromptTemplate(
                 template=feedback_prompt_template_str,
                 input_variables=["feedback"]
@@ -1377,432 +1415,39 @@ def get_session_recommendations(user_query, vector_store_instance, process_for_a
         response += "\nConsider also checking the full agenda or workshop list for more options!"
         return {"result": response, "debug_info_list": local_debug_info}
 
-def get_similar_backgrounds(vector_store_instance, debug_accumulator_parent=None):
-    """Analyze all resumes to find and group participants with similar technical backgrounds."""
-    local_debug_info = debug_accumulator_parent if debug_accumulator_parent is not None else []
-    local_debug_info.append("[FUNC_CALL] get_similar_backgrounds")
-    try:
-        # First, get a list of all unique resume sources
-        sim_bg_all_docs_query = "name contact information resume profile"
-        all_docs = vector_store_instance.similarity_search(
-            sim_bg_all_docs_query,
-            k=100  # Increased to ensure we get all resumes
-        )
-        local_debug_info.append(f"  Retrieved {len(all_docs)} docs for all sources using query: '{sim_bg_all_docs_query}' (k=100)")
-        
-        # Get unique sources
-        unique_sources = {doc.metadata.get('source', 'Unknown') for doc in all_docs}
-        local_debug_info.append(f"  Unique sources found: {len(unique_sources)}")
-        
-        if len(unique_sources) <= 1:
-            answer = "I need at least two resumes to find similar technical backgrounds. Please ensure multiple resumes are processed."
-            local_debug_info.append("  Not enough unique sources to find similarities.")
-            return {"result": answer, "debug_info_list": local_debug_info}
-        
-        # Now get content for each resume separately
-        resume_contents = {}
-        sim_bg_content_query = "technical skills experience background expertise programming languages frameworks tools projects"
-        local_debug_info.append(f"  Fetching content for each source using query: '{sim_bg_content_query}' (k=10)")
-        for source in unique_sources:
-            # Search specifically within this resume's content
-            source_filter = {"source": source}
-            source_docs = vector_store_instance.similarity_search(
-                sim_bg_content_query,
-                k=10,
-                filter=source_filter
-            )
-            local_debug_info.append(f"    Source '{source}': Retrieved {len(source_docs)} docs.")
-            # Combine all content for this resume
-            resume_contents[source] = " ".join([doc.page_content for doc in source_docs])
-        
-        # Analyze and group similar backgrounds
-        background_groups = {
-            "Programming Languages": {},
-            "Web Technologies": {},
-            "Cloud & DevOps": {},
-            "Data Science & ML": {},
-            "Domain Expertise": {}
-        }
-        
-        # Process each resume
-        for source, content in resume_contents.items():
-            content = content.lower()
-            
-            # Check for each category and its keywords
-            for category, keyword_groups in SKILL_CATEGORIES.items():
-                for main_keyword, variations in keyword_groups.items():
-                    if any(variation in content for variation in variations):
-                        if main_keyword not in background_groups[category]:
-                            background_groups[category][main_keyword] = []
-                        if source not in background_groups[category][main_keyword]:
-                            background_groups[category][main_keyword].append(source)
-        
-        # Format the response
-        response = "👥 **Participants with Similar Technical Backgrounds**\\n\\n"
-        
-        for category, skills in background_groups.items():
-            if any(skills.values()):  # Only show categories that have matches
-                response += f"**{category}**\\n"
-                for skill, sources in skills.items():
-                    if len(sources) > 1:  # Only show skills shared by at least 2 people
-                        # Remove .pdf extension and format names
-                        formatted_sources = [os.path.splitext(src)[0] for src in sources]
-                        response += f"- {skill.title()}: {', '.join(formatted_sources)}\n"
-                response += "\\n"
-        
-        if response == "👥 **Participants with Similar Technical Backgrounds**\\n\\n":
-            answer = "I couldn't find any shared technical backgrounds between the resumes. Try processing more resumes or check if the resumes contain detailed technical information."
-            local_debug_info.append("  No shared technical backgrounds found after analysis.")
-            return {"result": answer, "debug_info_list": local_debug_info}
-        
-        # Add source attribution
-        response += "\\nAnalysis based on resumes from:\\n- " + "\\n- ".join(sorted(list(unique_sources)))
-        local_debug_info.append("  Successfully generated similar backgrounds response.")
-        return {"result": response, "debug_info_list": local_debug_info}
-        
-    except Exception as e:
-        print(f"[DEBUG] Error in get_similar_backgrounds: {e}")
-        local_debug_info.append(f"[ERROR] in get_similar_backgrounds: {e}")
-        answer = f"I encountered an error while analyzing technical backgrounds: {str(e)}"
-        return {"result": answer, "debug_info_list": local_debug_info}
-
-def normalize_name(name):
-    """Normalize a name by removing spaces and converting to lowercase."""
-    return ''.join(name.lower().split())
-
-def get_resume_by_name(vector_store_instance, name, debug_accumulator_parent=None):
-    """Search for a specific person's resume."""
-    local_debug_info = debug_accumulator_parent if debug_accumulator_parent is not None else []
-    local_debug_info.append(f"[FUNC_CALL] get_resume_by_name (Name: '{name}')")
-    try:
-        print(f"[DEBUG] Searching for resume with name: {name}")
-        
-        # First, let's check what resumes are actually in the directory
-        resumes_dir = resume_processor.RESUMES_DIR_NAME
-        if not os.path.exists(resumes_dir):
-            return None, f"Resumes directory '{resumes_dir}' not found."
-            
-        physical_resumes = [f for f in os.listdir(resumes_dir) 
-                          if f.lower().endswith(('.pdf', '.docx'))]
-        print(f"[DEBUG] Physical resumes in directory: {physical_resumes}")
-        local_debug_info.append(f"  Physical resumes in '{resumes_dir}': {physical_resumes}")
-        
-        # Normalize the search name
-        normalized_search_name = normalize_name(name)
-        local_debug_info.append(f"  Normalized search name: {normalized_search_name}")
-        print(f"[DEBUG] Normalized search name: {normalized_search_name}")
-        
-        # First try to match against physical files
-        matching_files = []
-        for resume_file in physical_resumes:
-            base_name = os.path.splitext(resume_file)[0]
-            normalized_base = normalize_name(base_name)
-            # Check for partial matches
-            if (normalized_search_name in normalized_base or 
-                normalized_base in normalized_search_name or
-                any(part in normalized_base for part in normalized_search_name.split())):
-                matching_files.append(resume_file)
-                print(f"[DEBUG] Found matching file: {resume_file} (normalized: {normalized_base})")
-        local_debug_info.append(f"  Matching physical files: {matching_files}")
-        
-        # Get all documents from vector store with multiple search approaches
-        all_docs_from_vs = [] # Renamed to avoid confusion
-        search_queries_for_name = [
-            f"name {name}",  # Try exact name
-            *[f"name {part}" for part in name.split()],  # Try each part of the name
-            "full name contact information"  # Backup to get all names
-        ]
-        
-        local_debug_info.append(f"  Vector store search queries for name '{name}': {search_queries_for_name}")
-        for query in search_queries_for_name:
-            docs = vector_store_instance.similarity_search(
-                query,
-                k=100  # Increased to ensure we get all resumes
-            )
-            all_docs_from_vs.extend(docs) # Use the renamed list
-            local_debug_info.append(f"    Query '{query}' (k=100) -> Got {len(docs)} docs.")
-            
-        # Remove duplicates while preserving order
-        seen_sources = set() # Renamed for clarity
-        unique_all_docs_from_vs = [doc for doc in all_docs_from_vs # Use the renamed list
-                   if not (doc.metadata.get('source') in seen_sources or seen_sources.add(doc.metadata.get('source')))]
-        local_debug_info.append(f"  Total unique docs from vector store after de-duplication: {len(unique_all_docs_from_vs)}")
-        
-        # Get all unique sources
-        all_sources_in_vs = {doc.metadata.get('source', 'Unknown') for doc in unique_all_docs_from_vs} # Use the renamed list
-        print(f"[DEBUG] Sources in vector store: {all_sources_in_vs}")
-        local_debug_info.append(f"  Unique sources in vector store (from retrieved docs): {all_sources_in_vs}")
-        
-        # Try to find matches in vector store
-        matching_sources_in_vs = set() # Renamed for clarity
-        for doc in unique_all_docs_from_vs: # Use the renamed list
-            content = doc.page_content.lower()
-            source = doc.metadata.get('source', '')
-            normalized_content = normalize_name(content)
-            
-            # Check for partial matches in content
-            if (normalized_search_name in normalized_content or
-                any(part in normalized_content for part in normalized_search_name.split())):
-                matching_sources_in_vs.add(source)
-                print(f"[DEBUG] Found match in content of source: {source}")
-                continue
-                
-            # Check filename matches if no content match
-            base_name = os.path.splitext(source)[0]
-            normalized_base = normalize_name(base_name)
-            if (normalized_search_name in normalized_base or
-                normalized_base in normalized_search_name or
-                any(part in normalized_base for part in normalized_search_name.split())):
-                matching_sources_in_vs.add(source)
-                print(f"[DEBUG] Found match in filename: {source}")
-        
-        if not matching_sources_in_vs:
-            # If we found physical files but no vector store matches
-            if matching_files:
-                err_msg = (
-                    f"Found resume file(s) ({', '.join(matching_files)}) that might match '{name}', but they may need to be processed or re-processed. "
-                    f"Please click 'Process Resumes' in the sidebar. You can also try these prompts:\n"
-                    f"- List all available resumes.\n"
-                    f"- What are the skills of [another name]?"
-                )
-                local_debug_info.append("  No VS match, but physical files found. Advised reprocessing and provided suggestions.")
-                return {"docs": None, "error": err_msg, "debug_info_list": local_debug_info}
-            
-            # Try to suggest similar names from available resumes
-            available_names_from_physical = [] # Renamed for clarity
-            for resume in physical_resumes:
-                base_name = os.path.splitext(resume)[0].replace('_', ' ').title()
-                available_names_from_physical.append(base_name)
-            
-            suggestion_msg_parts = []
-            if available_names_from_physical:
-                suggestion_msg_parts.append(f"Available resumes you can ask about:\n- " + "\n- ".join(available_names_from_physical))
-            
-            suggestion_msg_parts.append("You can also try:\n- Double-check the spelling of the name.")
-            suggestion_msg_parts.append("- Ask for a list of all participants.")
-            suggestion_msg_parts.append("- Search for skills instead of a name, e.g., 'Who has Java skills?'.")
-
-            err_msg = f"Could not find a resume for '{name}'.\n\n" + "\n\n".join(suggestion_msg_parts)
-            local_debug_info.append(f"  No VS match, no physical file match (or physical not processed). Suggested names/prompts: {available_names_from_physical if available_names_from_physical else 'None'}")
-            return {"docs": None, "error": err_msg, "debug_info_list": local_debug_info}
-        
-        # Get detailed information from the matching resume(s)
-        all_content_docs = [] # Renamed
-        skill_search_queries = [ # Renamed
-            "technical skills experience programming languages frameworks tools technologies",
-            "software development experience projects technologies used",
-            "work experience technical responsibilities technologies",
-            "education certifications technical qualifications",
-            "skills expertise proficiency competencies",
-            "programming languages",
-            "frameworks libraries",
-            "tools platforms",
-            "technical projects",
-            "development experience"
-        ]
-        
-        local_debug_info.append(f"  Fetching detailed content for matched sources ({matching_sources_in_vs}) using queries: {skill_search_queries}")
-        
-        for source_vs in matching_sources_in_vs: # Renamed loop var
-            source_filter = {"source": source_vs}
-            for query_skill in skill_search_queries: # Renamed loop var
-                skill_docs_retrieved = vector_store_instance.similarity_search( # Renamed
-                    query_skill,
-                    k=10,  # Increased from 5 to get more comprehensive results
-                    filter=source_filter
-                )
-                # Only add unique documents
-                for doc_retrieved in skill_docs_retrieved: # Renamed loop var
-                    if doc_retrieved not in all_content_docs:
-                        all_content_docs.append(doc_retrieved)
-                print(f"[DEBUG] Retrieved {len(skill_docs_retrieved)} documents for query '{query_skill}' from {source_vs}")
-                local_debug_info.append(f"    Source '{source_vs}', query '{query_skill}' (k=10) -> Got {len(skill_docs_retrieved)} docs.")
-        
-        local_debug_info.append(f"  Total unique detailed content docs retrieved: {len(all_content_docs)}")
-        if not all_content_docs:
-            err_msg = (
-                f"Found a resume for '{name}', but I couldn't extract specific skills information clearly. "
-                f"The resume might need to be reprocessed, or the information isn't in a standard format. You could try:\n"
-                f"- Asking for general information about {name} from their resume.\n"
-                f"- Reprocessing resumes via the sidebar button."
-            )
-            local_debug_info.append("  Found resume source, but no detailed skill content docs retrieved. Provided suggestions.")
-            return {"docs": None, "error": err_msg, "debug_info_list": local_debug_info}
-        
-        local_debug_info.append("  Successfully retrieved detailed content docs.")
-        return {"docs": all_content_docs, "error": None, "debug_info_list": local_debug_info}
-        
-    except Exception as e:
-        print(f"[DEBUG] Error in get_resume_by_name: {e}")
-        local_debug_info.append(f"[ERROR] in get_resume_by_name: {e}")
-        err_msg = f"Error searching for {name}'s resume: {str(e)}"
-        return {"docs": None, "error": err_msg, "debug_info_list": local_debug_info}
-
-def extract_technical_skills(docs):
-    """Extract and categorize technical skills from resume content."""
-    if not docs:
-        return {}
-        
-    content = " ".join([doc.page_content.lower() for doc in docs])
+def extract_speakers_from_agenda():
+    """Extract speaker information from Agenda.pdf or fallback to default agenda"""
+    speakers = []
+    debug_info = []
     
-    found_skills = {}
-    for category, skills in SKILL_CATEGORIES.items():
-        category_skills = []
-        for skill, variations in skills.items():
-            # Look for skill variations in the content
-            if any(variation in content for variation in variations):
-                category_skills.append(skill)
-            # Also look for variations in context (with word boundaries)
-            elif any(f" {variation} " in f" {content} " for variation in variations):
-                category_skills.append(skill)
-        if category_skills:
-            found_skills[category] = sorted(category_skills)  # Sort skills alphabetically
-            
-    return found_skills
-
-def format_skills_response(name, skills_dict, source=None):
-    """Format the skills into a readable response."""
-    # This function is primarily formatting, debug info is less critical here unless complex logic is added.
-    if not skills_dict:
-        return f"No technical skills were found in {name}'s resume."
+    # Try to get agenda from PDF first
+    if os.path.exists(utils.PDF_AGENDA_FILE_PATH):
+        pdf_text = utils.extract_text_from_pdf(utils.PDF_AGENDA_FILE_PATH)
+        debug_info.append(f"Attempting to read speakers from {utils.PDF_AGENDA_FILE_PATH}")
         
-    response = f"🔍 **Technical Skills Summary for {name}**\n\n"
+        if pdf_text:
+            debug_info.append("Successfully extracted text from PDF")
+            # Split by lines and process each line
+            for line in pdf_text.split('\n'):
+                if '-' in line:
+                    # Get text after the last hyphen
+                    speaker = line.split('-')[-1].strip()
+                    if speaker and len(speaker) > 2:  # Basic validation
+                        speakers.append(speaker)
+                        debug_info.append(f"Found speaker: {speaker}")
+
+    # Fallback to agenda.json if no speakers found in PDF
+    if not speakers:
+        debug_info.append("No speakers found in PDF or PDF not available. Falling back to agenda.json")
+        agenda = utils.load_agenda()
+        for item in agenda.get('schedule', []):
+            if item.get('speaker'):
+                event = item.get('event', 'Unnamed Event')
+                speaker = item.get('speaker')
+                speakers.append(f"{event} - {speaker}")
+                debug_info.append(f"Found speaker from JSON: {speaker} for {event}")
     
-    for category, skills in skills_dict.items():
-        if skills:  # Only show categories that have skills
-            response += f"**{category}**:\n"
-            response += ", ".join(skill.title() for skill in skills)
-            response += "\n\n"
-    
-    if source:
-        response += f"\nSource Resume:\n- {source}"
-        
-    return response
-
-def get_alternative_prompts(original_query, bot_answer, bot_debug_info, llm_api_key):
-    """
-    Generates alternative user prompts based on the original query and the bot's last response (and its debug info).
-    Args:
-        original_query (str): The user's last query.
-        bot_answer (str): The bot's last answer.
-        bot_debug_info (str): The debug string associated with the bot's last answer.
-        llm_api_key (str): API key for LLM if needed for advanced suggestions.
-    Returns:
-        list: A list of suggested alternative prompt strings (typically 2-3).
-    """
-    suggestions = []
-    debug_info_str = str(bot_debug_info).lower()
-    original_query_lower = original_query.lower()
-
-    # Heuristic 1: Failed name search in resumes
-    if "could not find a resume for" in bot_answer.lower() or ("no documents found by get_resume_by_name" in debug_info_str and "specific person skill search" in debug_info_str):
-        suggestions.append("Try checking the spelling of the name.")
-        suggestions.append("List all available resumes to see participant names.")
-        if "skills" in original_query_lower:
-            name_parts = [p for p in original_query_lower.split() if p not in ["technical", "skills"]]
-            if name_parts:
-                suggestions.append(f"Ask for a general summary of '{' '.join(name_parts).title()}'s resume first.")
-        else:
-             suggestions.append("Search for specific skills instead of a name (e.g., 'Participants with Python skills').")
-
-    # Heuristic 2: Failed skill search or role profile search (no one found)
-    elif ("couldn't find any participants with" in bot_answer.lower() or 
-          "couldn't find participants strongly matching" in bot_answer.lower() or 
-          ("general skill search" in debug_info_str and "couldn't definitively confirm" in bot_answer.lower())):
-        suggestions.append("Try using broader skill terms (e.g., 'cloud technologies' instead of 'AWS S3').")
-        suggestions.append("Search for a different skill or combination of skills.")
-        suggestions.append("List all resumes and check them individually if you suspect the information exists.")
-
-    # Heuristic 3: Time query that didn't find a specific event or was ambiguous
-    elif ("general time query did not match a specific event" in debug_info_str or 
-          "couldn't find any specific events scheduled" in bot_answer.lower() or 
-          "couldn't understand the start time" in bot_answer.lower()):
-        suggestions.append("Ask for the full event agenda.")
-        suggestions.append("Try specifying AM/PM for the time (e.g., '2 PM' or '14:00').")
-        suggestions.append("Ask about a specific named event in the agenda (e.g., 'When is the keynote?').")
-
-    # Heuristic 4: Session recommendations couldn't be made or were very generic
-    elif ("couldn't find any workshop sessions to recommend" in bot_answer.lower() or 
-          "no specific workshop sessions found to recommend" in bot_answer.lower()):
-        suggestions.append("Ensure workshops.pdf is in the 'data' directory or workshops are in the agenda.")
-        suggestions.append("If asking for yourself, try phrasing like: 'Recommend sessions for a data scientist.'")
-        suggestions.append("View the full agenda for all session details.")
-
-    # Heuristic 5: General fallback was used, or answer is very generic like "I don't know"
-    elif ("conversationalretrievalchain result" in debug_info_str and 
-          ("don't know" in bot_answer.lower() or "sorry, i couldn't process" in bot_answer.lower() or "sorry, the context you provided does not contain" in bot_answer.lower())):
-        suggestions.append("Try rephrasing your question to be more specific.")
-        suggestions.append("Ask a simpler, related question first.")
-        if "resume" in original_query_lower or "skill" in original_query_lower:
-            suggestions.append("Ensure resumes have been processed recently if asking about them.")
-        else:
-            suggestions.append("Check the agenda for event-related information.")
-
-    # Default suggestions if no specific heuristic matched
-    if not suggestions:
-        suggestions.append("Try rephrasing your question.")
-        suggestions.append("Ask a more general question about the event.")
-        suggestions.append("View the event agenda for an overview.")
-
-    # Limit to 3 suggestions for brevity
-    return suggestions[:3]
-
-if __name__ == '__main__':
-    st.title("QA Handler Test")
-    utils.initialize_data_files() # Ensure data files exist
-
-    mock_api_key = st.text_input("Enter Google API Key for testing QA Handler", type="password")
-
-    if mock_api_key:
-        genai.configure(api_key=mock_api_key)
-        st.info("Google GenAI configured for QA Handler testing.")
-
-        st.subheader("Test Basic Info")
-        st.write("Agenda Query: What's the agenda?")
-        st.write("Response:", get_bot_response("What's the agenda?", mock_api_key))
-        st.write("Washroom Query: Where is the washroom?")
-        st.write("Response:", get_bot_response("Where is the washroom?", mock_api_key))
-        st.write("Time Query: How long until lunch?")
-        st.write("Response:", get_bot_response("How long until lunch?", mock_api_key))
-        st.write("Time Range Query: What is from 10 AM to 11 AM?", get_bot_response("What is from 10 AM to 11 AM?", mock_api_key) ) # Test new time range query
-
-        st.subheader("Test Resume Q&A (requires vector store)")
-        # To test this, you need to have a vector_store populated via resume_processor.py testing
-        # For this standalone test, we'll try to load it if it exists.
-        if "test_vector_store" not in st.session_state:
-            st.session_state.test_vector_store = resume_processor.get_existing_vector_store(mock_api_key)
-        
-        if st.session_state.test_vector_store:
-            st.success("Test vector store loaded.")
-            resume_query = st.text_input("Ask a question based on resumes (e.g., 'Who has experience in Python?')")
-            if resume_query:
-                st.write("Response:", get_bot_response(resume_query, mock_api_key, vector_store_instance=st.session_state.test_vector_store, chat_history=[]))
-        else:
-            st.warning("Could not load a test vector store. Run resume_processor.py tests to create one at vector_store/event_attendees_faiss, then rerun this.")
-
-        st.subheader("Test Conversational Feedback")
-        if "test_chat_history_feedback" not in st.session_state:
-            st.session_state.test_chat_history_feedback = []
-
-        feedback_query = st.text_input("Start feedback (e.g., 'I want to give feedback') or continue conversation:", key="feedback_q")
-        if feedback_query:
-            st.session_state.test_chat_history_feedback.append({"role": "user", "content": feedback_query})
-            response_data = get_bot_response(feedback_query, mock_api_key, chat_history=st.session_state.test_chat_history_feedback) # get_bot_response returns a dict
-            st.session_state.test_chat_history_feedback.append({"role": "assistant", "content": response_data.get("answer")})
-            st.write("Feedback Response:", response_data.get("answer"))
-            # st.write("Current feedback mode:", st.session_state.get("feedback_mode", False))
-
-        st.subheader("Test General Conversation")
-        general_query = st.text_input("Ask a general question (e.g., 'Hello')", key="general_q")
-        if general_query:
-             st.write("Response:", get_bot_response(general_query, mock_api_key, chat_history=[]))
-        
-        st.subheader("Test Alternative Prompts")
-        test_orig_query = "who is rajesh kumar and what are his skills"
-        test_bot_answer = "Could not find a resume for rajesh kumar."
-        test_debug_info = "[REASONING] Query Tentatively Matched 'Specific Person Skill Search'. Name: rajesh kumar\n  No documents found by get_resume_by_name for rajesh kumar."
-        st.write(f"Testing suggestions for: Q='{test_orig_query}', A='{test_bot_answer}'")
-        st.write("Suggestions: ", get_alternative_prompts(test_orig_query, test_bot_answer, test_debug_info, mock_api_key))
-
-    else:
-        st.warning("Please enter a Google API Key to test QA Handler features.")
+    return {
+        "speakers": speakers,
+        "debug_info": debug_info
+    }
