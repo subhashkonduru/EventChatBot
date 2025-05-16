@@ -41,7 +41,8 @@ DEFAULT_LOCATIONS = {
     "session_a_business_room": "Room 205, second floor.",
     "lunch_area": "Cafeteria, ground floor, at the end of the west wing.",
     "registration_desk": "At the main entrance of the venue.",
-    "first_aid": "Room G02, near the security office."
+    "first_aid": "Room G02, near the security office.",
+    "location": "Datavalley.ai | IT Solutions | Training & Placement Institute\n📍 Address: Plot No: 4, Image Gardens Rd, Madhapur, Hyderabad, Telangana 500081"
 }
 
 def initialize_data_files():
@@ -335,9 +336,8 @@ def get_time_until_event(event_name):
                 # Add a general heuristic for times typically in PM if AM/PM totally missing
                 elif not original_time_display_for_event or ("am" not in original_time_display_for_event.lower() and "pm" not in original_time_display_for_event.lower()):
                     if 1 <= hour <= 7: # Heuristic: 1 PM to 7 PM are common event end times if AM/PM is missing
-                        if event_name.lower() in ["lunch", "closing remarks", "reception", "dinner"]: # More likely PM
-                             hour += 12
-                             print(f"[DEBUG TIME_UTIL] Fallback heuristic PM for typical event. Hour set to: {hour}")
+                         hour += 12
+                         print(f"[DEBUG TIME_UTIL] Fallback heuristic PM for typical event. Hour set to: {hour}")
 
                 event_time_dt_obj = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
                 parsed_successfully = True
@@ -772,4 +772,4 @@ if __name__ == '__main__':
     st.write("Time until Opening Keynote:", get_time_until_event("Opening Keynote"))
     st.write("Time until an old event (e.g. Welcome Coffee if it\'s past 9 AM):")
     st.write(get_time_until_event("Welcome Coffee"))
-    st.write("Time until a non-existent event:", get_time_until_event("My Secret Meeting")) 
+    st.write("Time until a non-existent event:", get_time_until_event("My Secret Meeting"))
