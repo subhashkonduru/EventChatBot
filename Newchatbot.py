@@ -23,14 +23,18 @@ def main():
     if "google_api_key" not in st.session_state:
         st.session_state.google_api_key = ""
     if "messages" not in st.session_state:
+        welcome_message = """👋 Hello! I'm your AI Event Assistant. I can help you with:
+
+• 📅 Event schedule and agenda
+• 📍 Location information
+• 📄 Resume analysis
+• 💭 General questions
+
+How can I assist you today?"""
+
         st.session_state.messages = [{
-            "role": "assistant", 
-            "content": "👋 Hello! I'm your AI Event Assistant. I can help you with:\n\n" +
-                      "• 📅 Event schedule and agenda\n" +
-                      "• 📍 Location information\n" +
-                      "• 📄 Resume analysis\n" +
-                      "• 💭 General questions\n\n" +
-                      "How can I assist you today?"
+            "role": "assistant",
+            "content": welcome_message
         }]
     if "feedback_data" not in st.session_state:
         st.session_state.feedback_data = {} # Stores feedback for each message index {idx: 'up'/'down'}
@@ -173,20 +177,22 @@ def main():
     # --- Chat Interface ---    
     for i, message in enumerate(st.session_state.messages):
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            # Replace \n with proper line breaks for markdown
+            formatted_content = message["content"].replace("\\n", "\n")
+            st.markdown(formatted_content)
             if message["role"] == "assistant":
                 # Feedback buttons
                 col1, col2, col_spacer = st.columns([1, 1, 10])
                 with col1:
                     if st.button("👍", key=f"thumb_up_{i}", help="Good response!"):
                         st.session_state.feedback_data[i] = "up"
-                        st.session_state.current_suggestions = [] # Clear suggestions if any were shown
+                        st.session_state.current_suggestions = []
                         st.session_state.suggestions_for_idx = -1
                         st.rerun() 
                 with col2:
                     if st.button("👎", key=f"thumb_down_{i}", help="Needs improvement"):
                         st.session_state.feedback_data[i] = "down"
-                        st.session_state.generate_suggestions_for_idx = i # Trigger suggestion generation
+                        st.session_state.generate_suggestions_for_idx = i
                         st.rerun()
                 
                 # Display debug info if available

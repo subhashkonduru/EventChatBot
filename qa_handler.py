@@ -272,7 +272,7 @@ def get_details_for_all_resumes(vector_store_instance, detail_type_for_display, 
 
         # Combine page content of all retrieved documents for this resume
         resume_full_text_context = " \\n ".join([doc.page_content for doc in all_retrieved_docs_for_llm])
-        context_preview_for_debug = resume_full_text_context[:300].replace("\\n", " ") + "..."
+        context_preview_for_debug = resume_full_text_context[:300].replace("\\n", " ") + "...";
         local_debug_info.append(f"    Context for LLM (first 300 chars): {context_preview_for_debug}")
         # Limit context size to avoid exceeding token limits for the LLM, if necessary
         # max_context_length = 7000 # Example limit, depends on model (Gemini Flash has large context)
@@ -501,7 +501,7 @@ def get_bot_response(user_query, api_key, vector_store_instance=None, chat_histo
             name_match = re.search(name_extraction_pattern, query_lower)
             if not name_match:
                  # CORRECTED \\s to \s in regex
-                 name_match = re.search(r"([A-Za-z]+\s+[A-Za-z]+(?:'s)?)\s*(?:technical skills|skills|background|experience)", query_lower)
+                 name_match = re.search(r"([A-Za-z]+\s+[A-ZaZ]+(?:'s)?)\s*(?:technical skills|skills|background|experience)", query_lower)
 
             if name_match:
                 name = name_match.group(1).replace("'s", "").strip()
@@ -551,7 +551,7 @@ def get_bot_response(user_query, api_key, vector_store_instance=None, chat_histo
 
             # --- New Priority: "Resume <Name>" Summary Query ---
             # CORRECTED \\s to \s in regex
-            resume_summary_match = re.search(r"^(?:summarize resume for|resume summary for|resume for|resume)\s+([A-Za-z]+\s+[A-Za-z]+(?:\s+[A-Za-z]+)?)$", query_lower) # query_lower is already stripped
+            resume_summary_match = re.search(r"^(?:summarize resume for|resume summary for|resume for|resume)\s+([A-Za-z]+\s+[A-ZaZ]+(?:\s+[A-Za-z]+)?)$", query_lower) # query_lower is already stripped
             if resume_summary_match:
                 name_for_summary = resume_summary_match.group(1).strip()
                 debug_info_accumulator.append(f"[REASONING] Query matched 'Resume <Name> Summary' for Name: {name_for_summary}")
@@ -588,7 +588,7 @@ Concise Professional Summary for {person_name}:"""
                     debug_info_accumulator.append(f"[ERROR] LLM summary generation error for {name_for_summary}: {e}")
                     answer_text = f"Sorry, I encountered an error while trying to summarize {name_for_summary}'s resume."
                 
-                return {"answer": answer_text, "debug_info": "\\n".join(debug_info_accumulator)}
+                return {"answer": answer_text, "debug_info": "\\n".join(resume_data.get("debug_info_list",[]))}
 
             # --- NEW: Role-Based Profile Search ---
             # Regex to capture role name (group 1) and skills list (group 2)
@@ -613,9 +613,11 @@ Concise Professional Summary for {person_name}:"""
                 target_skills_for_match = [s.lower() for s in parsed_skills if s] # Lowercase for matching
                 
                 if not target_skills_for_match:
-                    debug_info_accumulator.append("[ERROR] No skills extracted for role-based search from string: '{skills_string}'. Falling through.")
+                    debug_info_accumulator.append("[ERROR] No skills extracted for role-based search")
                 else:
                     debug_info_accumulator.append(f"  Target Skills for Role '{role_name}': {target_skills_for_match}")
+                    min_skills_to_match = max(1, int(len(target_skills_for_match) * 0.5)) # Match at least 50% of skills, or 1 if only 1 skill
+                    debug_info_accumulator.append(f"  Minimum skills to match for '{role_name}' profile: {min_skills_to_match} (out of {len(target_skills_for_match)})")
 
                     all_resume_docs_for_sources = vector_store_instance.similarity_search("resume name contact information", k=200)
                     unique_sources_with_content = {}
@@ -659,7 +661,7 @@ Concise Professional Summary for {person_name}:"""
 
                         if current_matched_skills_count >= min_skills_to_match:
                             matching_participants_details.append(
-                                f"{participant_name_display} (Matched: {current_matched_skills_count}/{len(target_skills_for_match)} skills - {', '.join(sorted(found_skills_for_this_participant))})"
+                                f"{participant_name_display} (Matched: {current_matched_skills_for_role}/{len(target_skills_for_match)} skills - {', '.join(sorted(found_skills_for_this_participant))})"
                             )
                     
                     if matching_participants_details:
@@ -760,7 +762,7 @@ Concise Professional Summary for {person_name}:"""
                 "which workshops", "what workshops", "what sessions", "relevant workshops",
             ]
             
-            name_for_rec_pattern = r"(?:recommend|suggest|find|get|what|which)\s+(?:workshops?|sessions?|recommendations?)\s+(?:for|to|for participant|for user|for attendee)\s+([A-Za-z]+\s+[A-Za-z]+(?:\s+[A-Za-z]+)?)$"
+            name_for_rec_pattern = r"(?:recommend|suggest|find|get|what|which)\s+(?:workshops?|sessions?|recommendations?)\s+(?:for|to|for participant|for user|for attendee)\s+([A-Za-z]+\s+[A-ZaZ]+(?:\s+[A-Za-z]+)?)$"
             name_match_for_recommendation = re.search(name_for_rec_pattern, query_lower)
             target_participant_name_for_rec = None
 
@@ -783,7 +785,7 @@ Concise Professional Summary for {person_name}:"""
                 if target_participant_name_for_rec:
                     debug_info_accumulator.append(f"  Proceeding with recommendation for specific participant: {target_participant_name_for_rec}")
                     # process_for_all is already False, user_specific_bg_to_pass is already None
-                elif all_resumes_trigger_phrase_matched: # This implies recommendations for each resume based on its content
+                elif all_resumes_trigger_phrase_matched: # This implies recommendations for all resumes based on its content
                     debug_info_accumulator.append("[REASONING] Query matched 'session recommendation' for all resumes (specific phrasing).")
                     process_for_all = True
                 elif general_rec_keywords_matched: # General keywords, could be for chatbot user or all, depending on other phrases
@@ -799,9 +801,8 @@ Concise Professional Summary for {person_name}:"""
                             # This specific path might conflict with the user-specific recommendation block earlier (Priority 1 for "me"),
                             # but this ensures if it falls through, it can still be caught if general keywords are used.
                             # However, the earlier block for "for me" should ideally catch it first.
-                            # For now, let it proceed to get_session_recommendations, which will handle asking for BG if user_specific_bg_to_pass is None and not process_for_all / target_participant_name
-                            pass # Let get_session_recommendations handle it if user_specific_bg_to_pass is None and not specific target
-
+                            pass # Let get_session_recommendations handle it if user_specific_bg_to_pass is None and not process_for_all / target_participant_name
+                
                 # Ensure user-specific flow (asking for background for the chatbot user) isn't re-triggered if it fell through
                 # or if we are processing for a specific named participant.
                 if not st.session_state.get("waiting_for_user_background_for_recommendation") or target_participant_name_for_rec:
@@ -939,7 +940,7 @@ Concise Professional Summary for {person_name}:"""
                 "Ensure resumes have been processed recently."
             ]
             answer = (
-                "I encountered an error while searching through the resumes. Please try again or rephrase your query. You could also try:\\n"
+                "I encountered an error while searching through the resumes. Please try again or rephrase your query. You could also try these prompts:\n"
                 + "\\n".join([f"- {s}" for s in suggestions])
             )
             return {
@@ -1078,7 +1079,7 @@ Concise Professional Summary for {person_name}:"""
         chat_prompt = ChatPromptTemplate.from_messages(messages)
         
         # Initialize the chain
-        chain = LLMChain(llm=llm, prompt=chat_prompt, memory=st.session_state.chat_memory_main)
+        chain = LLMChain(llm=chat_prompt, prompt=chat_prompt, memory=st.session_state.chat_memory_main)
         
         debug_info_accumulator.append(f"  General Q&A LLMChain Prompt (System part): {system_prompt_template_to_use.prompt.template}")
         debug_info_accumulator.append(f"  Input to general Q&A chain (user_query): {user_query}")
@@ -1174,7 +1175,7 @@ def get_session_recommendations(user_query, vector_store_instance, process_for_a
         
         if not recommendations:
             answer = (f"I couldn't find any specific workshop sessions to recommend for {target_participant_name} based on their resume. "
-                       "Please ensure `workshops.pdf` is available or workshops are listed in the agenda, and that the resume contains relevant details. "
+                       "Please ensure either workshops.pdf is available or workshops are listed in the agenda, and that the resume contains relevant details. "
                        f"{target_participant_name} might want to check the full agenda.")
             local_debug_info.append(f"    No workshop recommendations found for {target_participant_name}.")
             return {"result": answer, "debug_info_list": local_debug_info}
@@ -1306,7 +1307,6 @@ def get_session_recommendations(user_query, vector_store_instance, process_for_a
                         final_response += "*Possible Relevance:*\n"
                         for reason in rec['relevance_reasons'][:2]:
                             final_response += f"• {reason[:100] + '...' if len(reason) > 100 else reason}\n"
-                    final_response += "\n"
                 final_response += "\n"
         
         if not any_recommendations_found_overall and unique_sources:
