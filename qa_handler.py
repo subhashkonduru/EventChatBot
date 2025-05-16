@@ -1058,6 +1058,9 @@ Concise Professional Summary for {person_name}:"""
                 Respond to their feedback and ask an appropriate follow-up question:"""
             
            
+           
+
+           
             feedback_prompt = PromptTemplate(
                 template=feedback_prompt_template_str,
                 input_variables=["feedback"]
@@ -1416,38 +1419,73 @@ def get_session_recommendations(user_query, vector_store_instance, process_for_a
         return {"result": response, "debug_info_list": local_debug_info}
 
 def extract_speakers_from_agenda():
-    """Extract speaker information from Agenda.pdf or fallback to default agenda"""
+    """Extract speaker information from Agenda.pdf"""
     speakers = []
     debug_info = []
     
-    # Try to get agenda from PDF first
-    if os.path.exists(utils.PDF_AGENDA_FILE_PATH):
-        pdf_text = utils.extract_text_from_pdf(utils.PDF_AGENDA_FILE_PATH)
-        debug_info.append(f"Attempting to read speakers from {utils.PDF_AGENDA_FILE_PATH}")
-        
-        if pdf_text:
-            debug_info.append("Successfully extracted text from PDF")
-            # Split by lines and process each line
-            for line in pdf_text.split('\n'):
-                if '-' in line:
-                    # Get text after the last hyphen
-                    speaker = line.split('-')[-1].strip()
-                    if speaker and len(speaker) > 2:  # Basic validation
-                        speakers.append(speaker)
-                        debug_info.append(f"Found speaker: {speaker}")
-
-    # Fallback to agenda.json if no speakers found in PDF
-    if not speakers:
-        debug_info.append("No speakers found in PDF or PDF not available. Falling back to agenda.json")
-        agenda = utils.load_agenda()
-        for item in agenda.get('schedule', []):
-            if item.get('speaker'):
-                event = item.get('event', 'Unnamed Event')
-                speaker = item.get('speaker')
-                speakers.append(f"{event} - {speaker}")
-                debug_info.append(f"Found speaker from JSON: {speaker} for {event}")
+    try:
+        if os.path.exists(utils.PDF_AGENDA_FILE_PATH):
+            pdf_text = utils.extract_text_from_pdf(utils.PDF_AGENDA_FILE_PATH)
+            if pdf_text:
+                # Extract text after last hyphen in each line
+                for line in pdf_text.split('\n'):
+                    if '-' in line:
+                        speaker = line.split('-')[-1].strip()
+                        if speaker and len(speaker) > 2:  # Basic validation
+                            speakers.append(speaker)
+                            debug_info.append(f"Found speaker: {speaker}")
+    except Exception as e:
+        debug_info.append(f"Error extracting speakers: {str(e)}")
     
     return {
         "speakers": speakers,
         "debug_info": debug_info
     }
+
+def get_alternative_prompts(original_query, bot_response, debug_info, api_key):
+    """
+    Generate alternative prompts based on the original query and bot's response.
+    
+    Args:
+        original_query (str): The user's original question
+        bot_response (str): The bot's response that received negative feedback
+        debug_info (str): Debug information from the original response
+        api_key (str): Google API key for LLM access
+    
+    Returns:
+        list: List of suggested alternative prompts
+    """
+    try:
+        llm = get_llm(api_key, temperature=0.7)
+        if not llm:
+            return []
+
+        suggestion_prompt = f"""Based on this user query and bot response, suggest 3 alternative ways to ask the question that might get better results.
+Make suggestions more specific and focused. Keep each suggestion under 15 words.
+
+Original Query: {original_query}
+Bot Response: {bot_response}
+
+Format suggestions as clear, direct questions. Focus on:
+1. Being more specific
+2. Breaking down complex queries
+3. Using different keywords for better matching
+
+Your suggestions:"""
+
+        suggestions = llm.invoke(suggestion_prompt).text.strip().split("\n")
+        
+        # Clean up suggestions (remove numbering, extra spaces, etc.)
+        cleaned_suggestions = []
+        for sugg in suggestions:
+            # Remove common prefixes and clean up
+            sugg = sugg.strip()
+            sugg = re.sub(r'^\d+[\)\.]\s*', '', sugg)
+            sugg = re.sub(r'^[-•]\s*', '', sugg)
+            if sugg and len(sugg) > 5:  # Basic validation
+                cleaned_suggestions.append(sugg)
+        
+        return cleaned_suggestions[:3]  # Return top 3 suggestions
+    except Exception as e:
+        print(f"Error generating alternative prompts: {e}")
+        return []

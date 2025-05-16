@@ -180,20 +180,25 @@ How can I assist you today?"""
             # Replace \n with proper line breaks for markdown
             formatted_content = message["content"].replace("\\n", "\n")
             st.markdown(formatted_content)
+            
             if message["role"] == "assistant":
-                # Feedback buttons
+                st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)  # Add spacing
+                
+                # Feedback buttons with better layout
                 col1, col2, col_spacer = st.columns([1, 1, 10])
                 with col1:
                     if st.button("👍", key=f"thumb_up_{i}", help="Good response!"):
                         st.session_state.feedback_data[i] = "up"
                         st.session_state.current_suggestions = []
                         st.session_state.suggestions_for_idx = -1
-                        st.rerun() 
+                        st.rerun()
                 with col2:
                     if st.button("👎", key=f"thumb_down_{i}", help="Needs improvement"):
                         st.session_state.feedback_data[i] = "down"
                         st.session_state.generate_suggestions_for_idx = i
                         st.rerun()
+                
+                st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)  # Add spacing after buttons
                 
                 # Display debug info if available
                 if "debug_info" in message and message["debug_info"]:
@@ -274,25 +279,57 @@ How can I assist you today?"""
                 handle_quick_action("Where is the washroom?")
         
         with col2:
-            if st.button("🍽️ Time to Lunch", help="Check time until lunch"):
-                handle_quick_action("How long until lunch?")
+            if st.button("🍽️ Lunch Time", help="Check lunch time"):  # Changed button text
+                handle_quick_action("What time is lunch?")  # Updated query to match new button purpose
             
-            if st.button("💭 Feedback", help="Share your thoughts about the event"):
-                initial_feedback_prompt = "I'd like to provide feedback about the event."
-                st.session_state.messages.append({"role": "user", "content": initial_feedback_prompt})
-                with st.spinner("Starting feedback collection..."):
-                    response_data = qa_handler.get_bot_response(
-                        initial_feedback_prompt,
-                        api_key=st.session_state.google_api_key,
-                        vector_store_instance=st.session_state.get("vector_store"),
-                        chat_history=st.session_state.messages
-                    )
-                bot_answer = response_data.get("answer", "Sorry, I couldn't process that feedback request.")
-                bot_debug_info = response_data.get("debug_info", "No debug info for feedback init.")
-                st.session_state.messages.append({"role": "assistant", "content": bot_answer, "debug_info": bot_debug_info})
-                st.session_state.current_suggestions = [] # Clear suggestions
-                st.session_state.suggestions_for_idx = -1
-                st.rerun()
+            if st.button("📍 Location", help="Get venue location"):
+                handle_quick_action("Where is the venue location?")
+
+    # Add feedback statistics in the top right
+    col_spacer, col_stats = st.columns([3, 1])
+    with col_stats:
+        total_thumbs_up = sum(1 for feedback in st.session_state.feedback_data.values() if feedback == "up")
+        total_thumbs_down = sum(1 for feedback in st.session_state.feedback_data.values() if feedback == "down")
+        total_responses = total_thumbs_up + total_thumbs_down
+        
+        # Set default accuracy to 100%
+        accuracy = 100 if total_responses == 0 else (total_thumbs_up / total_responses * 100)
+        
+        # Default to Excellent when no responses
+        performance_label = "Excellent"
+        emoji = "🌟"
+        
+        # Only change performance label if there are actual responses
+        if total_responses > 0:
+            if accuracy >= 90:
+                performance_label = "Excellent"
+                emoji = "🌟"
+            elif accuracy >= 75:
+                performance_label = "Good"
+                emoji = "✨"
+            elif accuracy >= 60:
+                performance_label = "Fair"
+                emoji = "⭐"
+            else:
+                performance_label = "Needs Improvement"
+                emoji = "💪"
+
+        st.markdown(
+            f"""
+            <div style='text-align: right; padding: 10px;'>
+                <div style='font-size: 0.8em; color: gray;'>Bot Accuracy</div>
+                <div style='font-weight: bold;'>{emoji} {performance_label}</div>
+                <div style='margin-top: 5px;'>
+                    <span title='Helpful responses'>👍 {total_thumbs_up}</span> &nbsp;
+                    <span title='Needs improvement'>👎 {total_thumbs_down}</span>
+                </div>
+                <div style='font-size: 0.8em; color: gray;'>
+                    {accuracy:.1f}% Accuracy
+                </div>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
 
 if __name__ == "__main__":
     main()
