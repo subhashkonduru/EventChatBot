@@ -307,6 +307,29 @@ def get_bot_response(user_query, api_key, vector_store_instance=None, chat_histo
     query_lower = user_query.lower().strip()
     debug_info_accumulator = []
 
+    # Check for greetings
+    greeting_keywords = {
+        "hi": "👋 Hi there! How can I help you today?",
+        "hello": "👋 Hello! How can I assist you?",
+        "hey": "👋 Hey! What can I do for you?",
+        "good morning": "🌅 Good morning! How may I help you?",
+        "good afternoon": "☀️ Good afternoon! What can I do for you?",
+        "good evening": "🌙 Good evening! How can I assist you?",
+        "namaste": "🙏 Namaste! How may I help you?",
+        "hola": "👋 Hola! How can I assist you?"
+    }
+
+    # Check if the query is just a greeting
+    query_words = query_lower.split()
+    if len(query_words) <= 2:  # Only check short greetings
+        for greeting, response in greeting_keywords.items():
+            if greeting in query_lower:
+                debug_info_accumulator.append(f"[REASONING] Query matched greeting keyword: '{greeting}'")
+                return {
+                    "answer": response,
+                    "debug_info": "\n".join(debug_info_accumulator)
+                }
+
     # Check for location-related queries
     location_keywords = ["location", "venue", "where is datavalley", "institute address", "where is the event", "where is training"]
     if any(keyword in query_lower for keyword in location_keywords):
@@ -566,18 +589,41 @@ def get_bot_response(user_query, api_key, vector_store_instance=None, chat_histo
             all_resumes_keywords = ["list all resumes", "show all resumes", "all resumes", "what resumes are processed", "available resumes"]
             if any(keyword in query_lower for keyword in all_resumes_keywords):
                 debug_info_accumulator.append("[REASONING] Query matched 'All Resumes' keywords.")
-                all_resume_docs_for_sources = vector_store_instance.similarity_search("resume name contact information", k=200) 
-                unique_sources = sorted(list(set(
-                    doc.metadata.get('source') 
-                    for doc in all_resume_docs_for_sources 
-                    if doc.metadata.get('source')
-                )))
-                if not unique_sources:
+                
+                # First try to get list directly from resumes directory
+                resumes_from_dir = []
+                if os.path.exists(resume_processor.RESUMES_DIR_NAME):
+                    resumes_from_dir = [f for f in os.listdir(resume_processor.RESUMES_DIR_NAME) 
+                                       if f.lower().endswith(('.pdf', '.docx'))]
+                
+                # Then get from vector store as backup
+                unique_sources = set()
+                if vector_store_instance:
+                    all_resume_docs = vector_store_instance.similarity_search(
+                        "resume profile information",
+                        k=100  # Increased to ensure we catch all
+                    )
+                    for doc in all_resume_docs:
+                        if doc.metadata.get('source'):
+                            unique_sources.add(doc.metadata['source'])
+                
+                # Combine both sources
+                all_resumes = set(resumes_from_dir) | set(os.path.basename(source) for source in unique_sources)
+                
+                if not all_resumes:
                     answer_text = "No resumes have been processed or found in the system yet."
                 else:
-                    formatted_names = [os.path.splitext(s)[0].replace('_', ' ').title() for s in unique_sources]
-                    answer_text = "📄 **Available Resumes:**\\n- " + "\\n- ".join(formatted_names)
-                return {"answer": answer_text, "debug_info": "\\n".join(debug_info_accumulator)}
+                    formatted_names = sorted([
+                        os.path.splitext(resume)[0].replace('_', ' ').title()
+                        for resume in all_resumes
+                    ])
+                    answer_text = "📄 **Available Resumes:**\n\n" + "\n".join(f"• {name}" for name in formatted_names)
+                
+                debug_info_accumulator.append(f"Found {len(all_resumes)} resumes in total.")
+                return {
+                    "answer": answer_text,
+                    "debug_info": "\n".join(debug_info_accumulator)
+                }
 
             # --- New Priority: "Resume <Name>" Summary Query ---
             # CORRECTED \\s to \s in regex
